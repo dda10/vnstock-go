@@ -18,16 +18,14 @@ jobs:
           go-version: '1.24'
 
       - name: Generate coverage
-        working-directory: vnstock-go
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Display coverage summary
-        working-directory: vnstock-go
         run: go tool cover -func=coverage.out
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          file: vnstock-go/coverage.out
+          file: coverage.out
           flags: unittests
           verbose: true

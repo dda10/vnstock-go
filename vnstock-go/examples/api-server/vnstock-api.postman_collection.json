@@ -1,0 +1,159 @@
+{
+	"info": {
+		"name": "Vnstock Go API",
+		"description": "API endpoints for testing vnstock-go library",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/health",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["health"]
+				}
+			}
+		},
+		{
+			"name": "Quote History",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/quote/history?symbol=VNM&days=30",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "quote", "history"],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "VNM",
+							"description": "Stock symbol (e.g., VNM, HPG, VIC)"
+						},
+						{
+							"key": "days",
+							"value": "30",
+							"description": "Number of days of history (default: 30)"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Real-Time Quotes",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/quote/realtime?symbols=VNM,HPG,VIC",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "quote", "realtime"],
+					"query": [
+						{
+							"key": "symbols",
+							"value": "VNM,HPG,VIC",
+							"description": "Comma-separated list of stock symbols"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Market Listing",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/listing?exchange=HOSE",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "listing"],
+					"query": [
+						{
+							"key": "exchange",
+							"value": "HOSE",
+							"description": "Exchange name (HOSE, HNX, UPCOM) or empty for all"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Company Profile",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/company/profile?symbol=VNM",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "company", "profile"],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "VNM",
+							"description": "Stock symbol"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Index Current",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/index/current?name=VNINDEX",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "index", "current"],
+					"query": [
+						{
+							"key": "name",
+							"value": "VNINDEX",
+							"description": "Index name (VNINDEX, HNX-INDEX, UPCOM-INDEX)"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Index History",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/index/history?name=VNINDEX&days=30",
+					"protocol": "http",
+					"host": ["localhost"],
+					"port": "8080",
+					"path": ["api", "index", "history"],
+					"query": [
+						{
+							"key": "name",
+							"value": "VNINDEX",
+							"description": "Index name"
+						},
+						{
+							"key": "days",
+							"value": "30",
+							"description": "Number of days of history (default: 30)"
+						}
+					]
+				}
+			}
+		}
+	]
+}

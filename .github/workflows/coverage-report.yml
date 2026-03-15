@@ -1,0 +1,33 @@
+name: Coverage Report
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Generate coverage
+        working-directory: vnstock-go
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display coverage summary
+        working-directory: vnstock-go
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: vnstock-go/coverage.out
+          flags: unittests
+          verbose: true

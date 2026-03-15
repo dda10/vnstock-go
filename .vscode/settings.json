@@ -1,0 +1,7 @@
+{
+    "kiroAgent.trustedCommands": [
+        "*"
+    ],
+    "go.testOnSave": false,
+    "go.lintTool": "golangci-lint"
+}

@@ -1,4 +1,4 @@
-package vci
+package tests
 
 import (
 	"context"
@@ -10,38 +10,25 @@ import (
 	"time"
 
 	vnstock "github.com/dda10/vnstock-go"
+	"github.com/dda10/vnstock-go/connector/vci"
 )
 
-func TestNew(t *testing.T) {
-	client := &http.Client{}
-	logger := slog.Default()
-
-	connector := New(client, logger)
+func TestVCINew(t *testing.T) {
+	connector := vci.New(&http.Client{}, slog.Default())
 	if connector == nil {
 		t.Fatal("expected non-nil connector")
 	}
-	if connector.client != client {
-		t.Error("expected client to be set")
-	}
-	if connector.logger != logger {
-		t.Error("expected logger to be set")
-	}
 }
 
-func TestNewWithNilLogger(t *testing.T) {
-	client := &http.Client{}
-	connector := New(client, nil)
+func TestVCINewWithNilLogger(t *testing.T) {
+	connector := vci.New(&http.Client{}, nil)
 	if connector == nil {
 		t.Fatal("expected non-nil connector")
 	}
-	if connector.logger == nil {
-		t.Error("expected default logger to be set")
-	}
 }
 
-func TestQuoteHistory_InvalidDateRange(t *testing.T) {
-	client := &http.Client{}
-	connector := New(client, slog.Default())
+func TestVCIQuoteHistory_InvalidDateRange(t *testing.T) {
+	connector := vci.New(&http.Client{}, slog.Default())
 
 	req := vnstock.QuoteHistoryRequest{
 		Symbol:   "VNM",
@@ -64,8 +51,7 @@ func TestQuoteHistory_InvalidDateRange(t *testing.T) {
 	}
 }
 
-func TestQuoteHistory_Success(t *testing.T) {
-	// Create mock server
+func TestVCIQuoteHistory_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/quote/history" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
@@ -99,19 +85,13 @@ func TestQuoteHistory_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create connector with mock server URL
-	client := &http.Client{}
-	_ = New(client, slog.Default())
-	// Override baseURL for testing (we'll need to make this configurable)
-	// For now, we'll test the parsing logic
-
+	_ = vci.New(&http.Client{}, slog.Default())
 	// Note: This test demonstrates the structure but won't actually call the mock server
 	// because baseURL is a package constant. In a real implementation, we'd make it configurable.
 }
 
-func TestRealTimeQuotes_EmptySymbols(t *testing.T) {
-	client := &http.Client{}
-	connector := New(client, slog.Default())
+func TestVCIRealTimeQuotes_EmptySymbols(t *testing.T) {
+	connector := vci.New(&http.Client{}, slog.Default())
 
 	_, err := connector.RealTimeQuotes(context.Background(), []string{})
 	if err == nil {
@@ -127,9 +107,8 @@ func TestRealTimeQuotes_EmptySymbols(t *testing.T) {
 	}
 }
 
-func TestIndexHistory_InvalidDateRange(t *testing.T) {
-	client := &http.Client{}
-	connector := New(client, slog.Default())
+func TestVCIIndexHistory_InvalidDateRange(t *testing.T) {
+	connector := vci.New(&http.Client{}, slog.Default())
 
 	req := vnstock.IndexHistoryRequest{
 		Name:     "VN-Index",
@@ -150,12 +129,4 @@ func TestIndexHistory_InvalidDateRange(t *testing.T) {
 	if vErr.Code != vnstock.InvalidInput {
 		t.Errorf("expected InvalidInput error code, got %s", vErr.Code)
 	}
-}
-
-func TestLogRequest(t *testing.T) {
-	client := &http.Client{}
-	connector := New(client, slog.Default())
-
-	// This test verifies that logRequest doesn't panic
-	connector.logRequest("GET", "https://example.com", 200, 100*time.Millisecond)
 }

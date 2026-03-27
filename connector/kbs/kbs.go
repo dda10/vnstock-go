@@ -835,6 +835,7 @@ var kbsStatementTypeMap = map[string]string{
 	"income":   "KQKD",
 	"balance":  "CDKT",
 	"cashflow": "LCTT",
+	"ratios":   "CSTC",
 }
 
 // kbsFinancialResponse represents the KBS financial statement API response.
@@ -892,7 +893,7 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 	if !ok {
 		return nil, &vnstock.Error{
 			Code:    vnstock.InvalidInput,
-			Message: fmt.Sprintf("invalid statement type: %s (must be income, balance, or cashflow)", req.Type),
+			Message: fmt.Sprintf("invalid statement type: %s (must be income, balance, cashflow, or ratios)", req.Type),
 		}
 	}
 
@@ -983,4 +984,449 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 	})
 
 	return periods, nil
+}
+
+// kbsEventResponse represents the KBS company events API response.
+type kbsEventResponse struct {
+	Data []kbsEventItem `json:"data"`
+}
+
+// kbsEventItem represents a single event from the KBS events API.
+type kbsEventItem struct {
+	Symbol      string `json:"SB"`
+	EventType   string `json:"ET"` // Event type code
+	Title       string `json:"TT"` // Title
+	ExDate      string `json:"ED"` // Ex-date
+	RecordDate  string `json:"RD"` // Record date
+	PaymentDate string `json:"PD"` // Payment date
+	Content     string `json:"CT"` // Content/details
+	Value       string `json:"VL"` // Value (dividend amount, ratio, etc.)
+}
+
+// CompanyEvents retrieves corporate events for a company.
+func (c *Connector) CompanyEvents(ctx context.Context, symbol string) ([]vnstock.CompanyEvent, error) {
+	if err := validateSymbol(symbol); err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/stockinfo/event/%s", iisBaseURL, symbol)
+
+	resp, err := c.doRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var eventResp kbsEventResponse
+	if err := json.NewDecoder(resp.Body).Decode(&eventResp); err != nil {
+		return nil, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode events response",
+			Cause:   err,
+		}
+	}
+
+	if len(eventResp.Data) == 0 {
+		return nil, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no events data available for symbol",
+		}
+	}
+
+	events := make([]vnstock.CompanyEvent, 0, len(eventResp.Data))
+	for _, item := range eventResp.Data {
+		event := vnstock.CompanyEvent{
+			Symbol:    symbol,
+			EventType: item.EventType,
+			Title:     item.Title,
+			Content:   item.Content,
+		}
+
+		// Parse dates
+		if item.ExDate != "" {
+			if t, err := parseKBSDate(item.ExDate); err == nil {
+				event.ExDate = t
+			}
+		}
+		if item.RecordDate != "" {
+			if t, err := parseKBSDate(item.RecordDate); err == nil {
+				event.RecordDate = t
+			}
+		}
+		if item.PaymentDate != "" {
+			if t, err := parseKBSDate(item.PaymentDate); err == nil {
+				event.PaymentDate = t
+			}
+		}
+
+		// Parse value
+		if item.Value != "" {
+			var val float64
+			fmt.Sscanf(item.Value, "%f", &val)
+			event.Value = val
+		}
+
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
+// parseKBSDate parses a KBS date string in DD/MM/YYYY format.
+func parseKBSDate(dateStr string) (time.Time, error) {
+	// Try DD/MM/YYYY format first
+	t, err := time.Parse("02/01/2006", dateStr)
+	if err == nil {
+		return t, nil
+	}
+	// Try YYYY-MM-DD format
+	t, err = time.Parse("2006-01-02", dateStr)
+	if err == nil {
+		return t, nil
+	}
+	return time.Time{}, &vnstock.Error{
+		Code:    vnstock.SerialiseError,
+		Message: "failed to parse date",
+		Cause:   err,
+	}
+}
+
+// kbsNewsResponse represents the KBS company news API response.
+type kbsNewsResponse struct {
+	Data []kbsNewsItem `json:"data"`
+}
+
+// kbsNewsItem represents a single news item from the KBS news API.
+type kbsNewsItem struct {
+	ID          int    `json:"ID"`
+	Symbol      string `json:"SB"`
+	Title       string `json:"TT"`
+	Content     string `json:"CT"`
+	Source      string `json:"SR"`
+	PublishDate string `json:"PD"`
+	URL         string `json:"URL"`
+}
+
+// CompanyNews retrieves news articles for a company.
+func (c *Connector) CompanyNews(ctx context.Context, symbol string) ([]vnstock.CompanyNews, error) {
+	if err := validateSymbol(symbol); err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/stockinfo/news/%s?page=1&limit=50", iisBaseURL, symbol)
+
+	resp, err := c.doRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var newsResp kbsNewsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&newsResp); err != nil {
+		return nil, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode news response",
+			Cause:   err,
+		}
+	}
+
+	if len(newsResp.Data) == 0 {
+		return nil, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no news data available for symbol",
+		}
+	}
+
+	news := make([]vnstock.CompanyNews, 0, len(newsResp.Data))
+	for _, item := range newsResp.Data {
+		newsItem := vnstock.CompanyNews{
+			Symbol:  symbol,
+			Title:   item.Title,
+			Content: item.Content,
+			Source:  item.Source,
+			URL:     item.URL,
+		}
+
+		if item.PublishDate != "" {
+			if t, err := parseKBSDate(item.PublishDate); err == nil {
+				newsItem.PublishedAt = t
+			}
+		}
+
+		news = append(news, newsItem)
+	}
+
+	return news, nil
+}
+
+// kbsInsiderTradeResponse represents the KBS insider trading API response.
+type kbsInsiderTradeResponse struct {
+	Data []kbsInsiderTradeItem `json:"data"`
+}
+
+// kbsInsiderTradeItem represents a single insider trade from the KBS API.
+type kbsInsiderTradeItem struct {
+	Symbol          string  `json:"SB"`
+	InsiderName     string  `json:"NM"`  // Name
+	Position        string  `json:"PS"`  // Position
+	TransactionType string  `json:"TT"`  // Transaction type (buy/sell)
+	Shares          int64   `json:"SH"`  // Shares traded
+	Price           float64 `json:"PR"`  // Price
+	Value           float64 `json:"VL"`  // Value
+	SharesBefore    int64   `json:"SHB"` // Shares before
+	SharesAfter     int64   `json:"SHA"` // Shares after
+	TransactionDate string  `json:"TD"`  // Transaction date
+	ReportDate      string  `json:"RD"`  // Report date
+}
+
+// InsiderTrading retrieves insider trading transactions for a company.
+func (c *Connector) InsiderTrading(ctx context.Context, symbol string) ([]vnstock.InsiderTrade, error) {
+	if err := validateSymbol(symbol); err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/stockinfo/news/internal-trading/%s?page=1&limit=50", iisBaseURL, symbol)
+
+	resp, err := c.doRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var tradeResp kbsInsiderTradeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tradeResp); err != nil {
+		return nil, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode insider trading response",
+			Cause:   err,
+		}
+	}
+
+	if len(tradeResp.Data) == 0 {
+		return nil, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no insider trading data available for symbol",
+		}
+	}
+
+	trades := make([]vnstock.InsiderTrade, 0, len(tradeResp.Data))
+	for _, item := range tradeResp.Data {
+		trade := vnstock.InsiderTrade{
+			Symbol:          symbol,
+			InsiderName:     item.InsiderName,
+			Position:        item.Position,
+			TransactionType: item.TransactionType,
+			Shares:          item.Shares,
+			Price:           item.Price / 1000.0, // Scale price
+			Value:           item.Value,
+			SharesBefore:    item.SharesBefore,
+			SharesAfter:     item.SharesAfter,
+		}
+
+		if item.TransactionDate != "" {
+			if t, err := parseKBSDate(item.TransactionDate); err == nil {
+				trade.TransactionDate = t
+			}
+		}
+		if item.ReportDate != "" {
+			if t, err := parseKBSDate(item.ReportDate); err == nil {
+				trade.ReportDate = t
+			}
+		}
+
+		trades = append(trades, trade)
+	}
+
+	return trades, nil
+}
+
+// kbsGroupStocksResponse represents the KBS index constituents API response.
+type kbsGroupStocksResponse struct {
+	Data []kbsGroupStockItem `json:"data"`
+}
+
+// kbsGroupStockItem represents a single stock in an index group.
+type kbsGroupStockItem struct {
+	Symbol   string `json:"symbol"`
+	Name     string `json:"name"`
+	Exchange string `json:"exchange"`
+}
+
+// SymbolsByGroup retrieves symbols belonging to an index group (e.g., VN30, HNX30).
+func (c *Connector) SymbolsByGroup(ctx context.Context, groupCode string) (vnstock.SymbolGroup, error) {
+	if groupCode == "" {
+		return vnstock.SymbolGroup{}, &vnstock.Error{
+			Code:    vnstock.InvalidInput,
+			Message: "group code cannot be empty",
+		}
+	}
+
+	url := fmt.Sprintf("%s/index/%s/stocks", iisBaseURL, groupCode)
+
+	resp, err := c.doRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return vnstock.SymbolGroup{}, err
+	}
+	defer resp.Body.Close()
+
+	var groupResp kbsGroupStocksResponse
+	if err := json.NewDecoder(resp.Body).Decode(&groupResp); err != nil {
+		return vnstock.SymbolGroup{}, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode group stocks response",
+			Cause:   err,
+		}
+	}
+
+	if len(groupResp.Data) == 0 {
+		return vnstock.SymbolGroup{}, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no symbols found for group",
+		}
+	}
+
+	symbols := make([]string, 0, len(groupResp.Data))
+	for _, item := range groupResp.Data {
+		symbols = append(symbols, item.Symbol)
+	}
+
+	return vnstock.SymbolGroup{
+		GroupCode: groupCode,
+		GroupName: groupCode,
+		Symbols:   symbols,
+	}, nil
+}
+
+// kbsIndustryStocksResponse represents the KBS industry stocks API response.
+type kbsIndustryStocksResponse struct {
+	Data []kbsIndustryStockItem `json:"data"`
+}
+
+// kbsIndustryStockItem represents a single stock in an industry.
+type kbsIndustryStockItem struct {
+	Symbol       string `json:"symbol"`
+	Name         string `json:"name"`
+	Exchange     string `json:"exchange"`
+	IndustryCode string `json:"industryCode"`
+	IndustryName string `json:"industryName"`
+}
+
+// SymbolsByIndustry retrieves symbols belonging to a specific industry.
+func (c *Connector) SymbolsByIndustry(ctx context.Context, industryCode string) (vnstock.IndustryInfo, error) {
+	url := fmt.Sprintf("%s/sector/stock", iisBaseURL)
+	if industryCode != "" {
+		url = fmt.Sprintf("%s?industryCode=%s", url, industryCode)
+	}
+
+	resp, err := c.doRequest(ctx, "GET", url, nil)
+	if err != nil {
+		return vnstock.IndustryInfo{}, err
+	}
+	defer resp.Body.Close()
+
+	var industryResp kbsIndustryStocksResponse
+	if err := json.NewDecoder(resp.Body).Decode(&industryResp); err != nil {
+		return vnstock.IndustryInfo{}, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode industry stocks response",
+			Cause:   err,
+		}
+	}
+
+	if len(industryResp.Data) == 0 {
+		return vnstock.IndustryInfo{}, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no symbols found for industry",
+		}
+	}
+
+	symbols := make([]string, 0, len(industryResp.Data))
+	industryName := ""
+	for _, item := range industryResp.Data {
+		symbols = append(symbols, item.Symbol)
+		if industryName == "" && item.IndustryName != "" {
+			industryName = item.IndustryName
+		}
+	}
+
+	return vnstock.IndustryInfo{
+		IndustryCode: industryCode,
+		IndustryName: industryName,
+		Symbols:      symbols,
+	}, nil
+}
+
+// FinancialRatios retrieves key financial ratios for a company.
+// KBS provides ratios through the financial statement API with type "ratios".
+func (c *Connector) FinancialRatios(ctx context.Context, req vnstock.FinancialRatioRequest) (vnstock.FinancialRatio, error) {
+	if err := validateSymbol(req.Symbol); err != nil {
+		return vnstock.FinancialRatio{}, err
+	}
+
+	// Use the financial statement API with ratios type
+	finReq := vnstock.FinancialRequest{
+		Symbol: req.Symbol,
+		Type:   "ratios",
+		Period: "annual",
+	}
+
+	periods, err := c.FinancialStatement(ctx, finReq)
+	if err != nil {
+		return vnstock.FinancialRatio{}, err
+	}
+
+	if len(periods) == 0 {
+		return vnstock.FinancialRatio{}, &vnstock.Error{
+			Code:    vnstock.NoData,
+			Message: "no financial ratio data available",
+		}
+	}
+
+	// Use the most recent period
+	latest := periods[0]
+
+	ratio := vnstock.FinancialRatio{
+		Symbol:     req.Symbol,
+		ReportDate: time.Date(latest.Year, 12, 31, 0, 0, 0, 0, time.UTC),
+	}
+
+	// Map fields to ratio struct
+	if v, ok := latest.Fields["ROA"]; ok {
+		ratio.ROA = v
+	}
+	if v, ok := latest.Fields["ROE"]; ok {
+		ratio.ROE = v
+	}
+	if v, ok := latest.Fields["Net Profit Margin"]; ok {
+		ratio.NetProfitMargin = v
+	}
+	if v, ok := latest.Fields["Revenue Growth"]; ok {
+		ratio.RevenueGrowth = v
+	}
+	if v, ok := latest.Fields["Profit Growth"]; ok {
+		ratio.ProfitGrowth = v
+	}
+	if v, ok := latest.Fields["EPS"]; ok {
+		ratio.EPS = v
+	}
+	if v, ok := latest.Fields["P/E"]; ok {
+		ratio.PE = v
+	}
+	if v, ok := latest.Fields["P/B"]; ok {
+		ratio.PB = v
+	}
+	if v, ok := latest.Fields["Current Ratio"]; ok {
+		ratio.CurrentRatio = v
+	}
+	if v, ok := latest.Fields["Debt to Equity"]; ok {
+		ratio.DebtToEquity = v
+	}
+	if v, ok := latest.Fields["Dividend Yield"]; ok {
+		ratio.DividendYield = v
+	}
+	if v, ok := latest.Fields["Book Value Per Share"]; ok {
+		ratio.BookValuePerShare = v
+	}
+
+	return ratio, nil
 }

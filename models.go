@@ -155,3 +155,80 @@ type GoldPriceRequest struct {
 	Date   time.Time `json:"date"`   // Date for historical prices (optional, defaults to today)
 	Source string    `json:"source"` // "SJC" or "BTMC" (optional, defaults to all sources)
 }
+
+// CompanyEvent represents a corporate event (dividends, AGM, etc.).
+type CompanyEvent struct {
+	Symbol      string    `json:"symbol"`
+	EventType   string    `json:"event_type"`   // "dividend", "agm", "rights", etc.
+	Title       string    `json:"title"`        // Event title/description
+	ExDate      time.Time `json:"ex_date"`      // Ex-date for the event
+	RecordDate  time.Time `json:"record_date"`  // Record date
+	PaymentDate time.Time `json:"payment_date"` // Payment/execution date
+	Content     string    `json:"content"`      // Additional details
+	Value       float64   `json:"value"`        // Dividend amount or ratio
+}
+
+// CompanyNews represents a news article about a company.
+type CompanyNews struct {
+	Symbol      string    `json:"symbol"`
+	Title       string    `json:"title"`
+	Content     string    `json:"content"`
+	Source      string    `json:"source"`
+	PublishedAt time.Time `json:"published_at"`
+	URL         string    `json:"url"`
+}
+
+// InsiderTrade represents an insider trading transaction.
+type InsiderTrade struct {
+	Symbol          string    `json:"symbol"`
+	InsiderName     string    `json:"insider_name"`
+	Position        string    `json:"position"`         // Position/title of insider
+	TransactionType string    `json:"transaction_type"` // "buy" or "sell"
+	Shares          int64     `json:"shares"`           // Number of shares
+	Price           float64   `json:"price"`            // Transaction price
+	Value           float64   `json:"value"`            // Total transaction value
+	SharesBefore    int64     `json:"shares_before"`    // Shares held before
+	SharesAfter     int64     `json:"shares_after"`     // Shares held after
+	TransactionDate time.Time `json:"transaction_date"`
+	ReportDate      time.Time `json:"report_date"`
+}
+
+// SymbolGroup represents a group of symbols (index constituents, industry, etc.).
+type SymbolGroup struct {
+	GroupCode   string   `json:"group_code"`
+	GroupName   string   `json:"group_name"`
+	Description string   `json:"description"`
+	Symbols     []string `json:"symbols"`
+}
+
+// IndustryInfo represents an industry classification with its symbols.
+type IndustryInfo struct {
+	IndustryCode string   `json:"industry_code"`
+	IndustryName string   `json:"industry_name"`
+	Symbols      []string `json:"symbols"`
+}
+
+// FinancialRatio represents key financial ratios for a company.
+// Ported from vnquant's basic index functionality.
+type FinancialRatio struct {
+	Symbol            string    `json:"symbol"`
+	ReportDate        time.Time `json:"report_date"`
+	ROA               float64   `json:"roa"`                  // Return on Assets (last 4 quarters)
+	ROE               float64   `json:"roe"`                  // Return on Equity (last 4 quarters)
+	NetProfitMargin   float64   `json:"net_profit_margin"`    // Net Profit Margin (yearly)
+	RevenueGrowth     float64   `json:"revenue_growth"`       // Net Revenue Growth YoY
+	ProfitGrowth      float64   `json:"profit_growth"`        // Profit After Tax Growth YoY
+	EPS               float64   `json:"eps"`                  // Earnings Per Share
+	PE                float64   `json:"pe"`                   // Price to Earnings ratio
+	PB                float64   `json:"pb"`                   // Price to Book ratio
+	CurrentRatio      float64   `json:"current_ratio"`        // Current Assets / Current Liabilities
+	DebtToEquity      float64   `json:"debt_to_equity"`       // Total Debt / Equity
+	DividendYield     float64   `json:"dividend_yield"`       // Dividend Yield %
+	BookValuePerShare float64   `json:"book_value_per_share"` // Book Value Per Share
+}
+
+// FinancialRatioRequest specifies parameters for financial ratio retrieval.
+type FinancialRatioRequest struct {
+	Symbol     string    `json:"symbol"`
+	ReportDate time.Time `json:"report_date"` // Optional, defaults to latest
+}

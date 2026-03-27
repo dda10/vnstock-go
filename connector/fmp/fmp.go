@@ -71,3 +71,8 @@ func (c *Connector) Officers(ctx context.Context, symbol string) ([]vnstock.Offi
 func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.FinancialRequest) ([]vnstock.FinancialPeriod, error) {
 	return nil, vnstock.ErrNotSupported
 }
+
+// FinancialRatios returns ErrNotSupported for FMP.
+func (c *Connector) FinancialRatios(ctx context.Context, req vnstock.FinancialRatioRequest) (vnstock.FinancialRatio, error) {
+	return vnstock.FinancialRatio{}, vnstock.ErrNotSupported
+}

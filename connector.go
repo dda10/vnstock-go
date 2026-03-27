@@ -30,6 +30,10 @@ type Connector interface {
 
 	// FinancialStatement retrieves financial statement data for a company.
 	FinancialStatement(ctx context.Context, req FinancialRequest) ([]FinancialPeriod, error)
+
+	// FinancialRatios retrieves key financial ratios for a company.
+	// Includes ROA, ROE, P/E, P/B, profit margins, and growth metrics.
+	FinancialRatios(ctx context.Context, req FinancialRatioRequest) (FinancialRatio, error)
 }
 
 // ErrNotSupported is a sentinel error returned by connectors that do not
@@ -81,4 +85,9 @@ func (m *MockConnector) Officers(ctx context.Context, symbol string) ([]Officer,
 // FinancialStatement returns ErrNotSupported.
 func (m *MockConnector) FinancialStatement(ctx context.Context, req FinancialRequest) ([]FinancialPeriod, error) {
 	return nil, ErrNotSupported
+}
+
+// FinancialRatios returns ErrNotSupported.
+func (m *MockConnector) FinancialRatios(ctx context.Context, req FinancialRatioRequest) (FinancialRatio, error) {
+	return FinancialRatio{}, ErrNotSupported
 }

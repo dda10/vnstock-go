@@ -8,4 +8,5 @@ import (
 	_ "github.com/dda10/vnstock-go/connector/fmp"     // Register FMP connector
 	_ "github.com/dda10/vnstock-go/connector/gold"    // Register GOLD connector
 	_ "github.com/dda10/vnstock-go/connector/vci"     // Register VCI connector
+	_ "github.com/dda10/vnstock-go/connector/vnd"     // Register VND connector
 )

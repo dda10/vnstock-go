@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Vnstock-Go Library Structure Test ===\n")
+	fmt.Println("=== Vnstock-Go Library Structure Test ===")
 
 	// Test 1: Client Creation
 	fmt.Println("Test 1: Client Creation")

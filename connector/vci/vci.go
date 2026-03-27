@@ -1260,3 +1260,110 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 
 	return periods, nil
 }
+
+// FinancialRatios retrieves key financial ratios for a company.
+// Uses VCI GraphQL API to fetch ratio data.
+func (c *Connector) FinancialRatios(ctx context.Context, req vnstock.FinancialRatioRequest) (vnstock.FinancialRatio, error) {
+	if req.Symbol == "" {
+		return vnstock.FinancialRatio{}, &vnstock.Error{
+			Code:    vnstock.InvalidInput,
+			Message: "symbol cannot be empty",
+		}
+	}
+
+	// GraphQL query for financial ratios
+	query := `
+		query FinancialRatios($symbol: String!) {
+			financialRatios(symbol: $symbol) {
+				roa
+				roe
+				netProfitMargin
+				revenueGrowth
+				profitGrowth
+				eps
+				pe
+				pb
+				currentRatio
+				debtToEquity
+				dividendYield
+				bookValuePerShare
+				reportDate
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"symbol": req.Symbol,
+	}
+
+	resp, err := c.doGraphQLRequest(ctx, query, variables)
+	if err != nil {
+		return vnstock.FinancialRatio{}, err
+	}
+	defer resp.Body.Close()
+
+	// Parse GraphQL response
+	var graphqlResp struct {
+		Data struct {
+			FinancialRatios struct {
+				ROA               float64 `json:"roa"`
+				ROE               float64 `json:"roe"`
+				NetProfitMargin   float64 `json:"netProfitMargin"`
+				RevenueGrowth     float64 `json:"revenueGrowth"`
+				ProfitGrowth      float64 `json:"profitGrowth"`
+				EPS               float64 `json:"eps"`
+				PE                float64 `json:"pe"`
+				PB                float64 `json:"pb"`
+				CurrentRatio      float64 `json:"currentRatio"`
+				DebtToEquity      float64 `json:"debtToEquity"`
+				DividendYield     float64 `json:"dividendYield"`
+				BookValuePerShare float64 `json:"bookValuePerShare"`
+				ReportDate        string  `json:"reportDate"`
+			} `json:"financialRatios"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&graphqlResp); err != nil {
+		return vnstock.FinancialRatio{}, &vnstock.Error{
+			Code:    vnstock.SerialiseError,
+			Message: "failed to decode financial ratios response",
+			Cause:   err,
+		}
+	}
+
+	// Check for GraphQL errors
+	if len(graphqlResp.Errors) > 0 {
+		return vnstock.FinancialRatio{}, &vnstock.Error{
+			Code:    vnstock.HTTPError,
+			Message: fmt.Sprintf("GraphQL error: %s", graphqlResp.Errors[0].Message),
+		}
+	}
+
+	data := graphqlResp.Data.FinancialRatios
+
+	// Parse report date
+	var reportDate time.Time
+	if data.ReportDate != "" {
+		reportDate, _ = time.Parse("2006-01-02", data.ReportDate)
+	}
+
+	return vnstock.FinancialRatio{
+		Symbol:            req.Symbol,
+		ReportDate:        reportDate,
+		ROA:               data.ROA,
+		ROE:               data.ROE,
+		NetProfitMargin:   data.NetProfitMargin,
+		RevenueGrowth:     data.RevenueGrowth,
+		ProfitGrowth:      data.ProfitGrowth,
+		EPS:               data.EPS,
+		PE:                data.PE,
+		PB:                data.PB,
+		CurrentRatio:      data.CurrentRatio,
+		DebtToEquity:      data.DebtToEquity,
+		DividendYield:     data.DividendYield,
+		BookValuePerShare: data.BookValuePerShare,
+	}, nil
+}

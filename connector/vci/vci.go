@@ -1137,6 +1137,10 @@ func (c *Connector) Officers(ctx context.Context, symbol string) ([]vnstock.Offi
 }
 
 // FinancialStatement retrieves financial statement data for a company.
+// FinancialStatement retrieves financial statement data for a company.
+// Uses the CompanyFinancialRatio GraphQL query (same as Python vnstock).
+// The VCI API returns all financial data in a single query with field codes
+// like BSA1 (balance sheet), ISA1 (income statement), CFA1 (cash flow).
 func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.FinancialRequest) ([]vnstock.FinancialPeriod, error) {
 	if req.Symbol == "" {
 		return nil, &vnstock.Error{
@@ -1145,41 +1149,228 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 		}
 	}
 
-	// Validate statement type
-	validTypes := map[string]bool{
-		"income":   true,
-		"balance":  true,
-		"cashflow": true,
+	// Map period format: "annual" -> "Y", "quarter" -> "Q"
+	period := req.Period
+	switch period {
+	case "annual", "yearly", "year":
+		period = "Y"
+	case "quarter", "quarterly":
+		period = "Q"
 	}
-	if !validTypes[req.Type] {
-		return nil, &vnstock.Error{
-			Code:    vnstock.InvalidInput,
-			Message: fmt.Sprintf("invalid statement type: %s (must be income, balance, or cashflow)", req.Type),
+
+	// GraphQL query matching the Python vnstock implementation.
+	// Uses CompanyFinancialRatio which returns all financial data including
+	// income statement (ISA/ISB), balance sheet (BSA/BSB), cash flow (CFA/CFB),
+	// and computed ratios (pe, pb, roe, roa, etc.)
+	query := `
+		fragment Ratios on CompanyFinancialRatio {
+			ticker
+			yearReport
+			lengthReport
+			revenue
+			revenueGrowth
+			netProfit
+			netProfitGrowth
+			ebitMargin
+			roe
+			roic
+			roa
+			pe
+			pb
+			eps
+			currentRatio
+			cashRatio
+			quickRatio
+			interestCoverage
+			ae
+			netProfitMargin
+			grossMargin
+			ev
+			issueShare
+			ps
+			pcf
+			bvps
+			evPerEbitda
+			BSA1
+			BSA2
+			BSA5
+			BSA8
+			BSA10
+			BSA16
+			BSA22
+			BSA23
+			BSA24
+			BSA27
+			BSA29
+			BSA43
+			BSA46
+			BSA50
+			BSA53
+			BSA54
+			BSA55
+			BSA56
+			BSA58
+			BSA67
+			BSA71
+			BSA78
+			BSA79
+			BSA80
+			BSA86
+			BSA90
+			BSA96
+			CFA21
+			CFA22
+			at
+			fat
+			acp
+			dso
+			dpo
+			ccc
+			de
+			le
+			ebitda
+			ebit
+			dividend
+			RTQ10
+			charterCapitalRatio
+			RTQ4
+			epsTTM
+			charterCapital
+			fae
+			RTQ17
+			CFA26
+			CFA6
+			CFA9
+			BSA85
+			CFA36
+			BSB98
+			BSB101
+			BSA89
+			CFA34
+			CFA14
+			ISB34
+			ISB27
+			ISA23
+			ISA102
+			CFA27
+			CFA12
+			CFA28
+			BSA18
+			BSB102
+			BSB110
+			BSB108
+			CFA23
+			ISB41
+			BSB103
+			BSA40
+			BSB99
+			CFA16
+			CFA18
+			CFA3
+			ISB30
+			BSA33
+			ISB29
+			ISA2
+			CFA24
+			BSB105
+			CFA37
+			BSA95
+			CFA10
+			ISA4
+			BSA82
+			CFA25
+			BSB111
+			ISA20
+			CFA19
+			ISA6
+			ISA3
+			BSB100
+			ISB31
+			ISB38
+			ISB26
+			CFA20
+			CFA35
+			ISA17
+			ISA9
+			CFA4
+			ISA7
+			CFA5
+			ISA22
+			CFA8
+			CFA33
+			CFA29
+			BSA30
+			BSA84
+			BSA44
+			BSB107
+			ISB37
+			ISA8
+			BSB109
+			ISA19
+			ISB36
+			ISA13
+			ISA1
+			ISA14
+			BSB112
+			ISA21
+			ISA10
+			CFA11
+			ISA12
+			BSA15
+			BSB104
+			BSA92
+			BSB106
+			BSA94
+			ISA18
+			CFA17
+			BSB114
+			ISA15
+			BSB116
+			ISB28
+			BSB97
+			CFA15
+			ISA11
+			ISB33
+			BSA47
+			ISB40
+			ISB39
+			CFA7
+			CFA13
+			ISB25
+			BSA45
+			BSB118
+			CFA1
+			ISB35
+			CFA31
+			BSB113
+			ISB32
+			ISA16
+			BSA48
+			BSA36
+			CFA30
+			CFA2
+			CFA38
+			CFA32
+			ISA5
+			BSA49
+			__typename
 		}
-	}
 
-	// Map statement type to GraphQL field name
-	statementTypeMap := map[string]string{
-		"income":   "incomeStatement",
-		"balance":  "balanceSheet",
-		"cashflow": "cashFlowStatement",
-	}
-	graphqlType := statementTypeMap[req.Type]
-
-	// GraphQL query for financial statements
-	query := fmt.Sprintf(`
-		query FinancialStatement($symbol: String!, $period: String!) {
-			%s(symbol: $symbol, period: $period) {
-				year
-				quarter
-				fields
+		query Query($ticker: String!, $period: String!) {
+			CompanyFinancialRatio(ticker: $ticker, period: $period) {
+				ratio {
+					...Ratios
+					__typename
+				}
+				period
+				__typename
 			}
 		}
-	`, graphqlType)
+	`
 
 	variables := map[string]interface{}{
-		"symbol": req.Symbol,
-		"period": req.Period,
+		"ticker": req.Symbol,
+		"period": period,
 	}
 
 	resp, err := c.doGraphQLRequest(ctx, query, variables)
@@ -1188,12 +1379,12 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 	}
 	defer resp.Body.Close()
 
-	// Parse GraphQL response
+	// Parse the CompanyFinancialRatio response
 	var graphqlResp struct {
-		Data map[string][]struct {
-			Year    int                `json:"year"`
-			Quarter int                `json:"quarter"`
-			Fields  map[string]float64 `json:"fields"`
+		Data struct {
+			CompanyFinancialRatio struct {
+				Ratio []map[string]interface{} `json:"ratio"`
+			} `json:"CompanyFinancialRatio"`
 		} `json:"data"`
 		Errors []struct {
 			Message string `json:"message"`
@@ -1208,7 +1399,6 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 		}
 	}
 
-	// Check for GraphQL errors
 	if len(graphqlResp.Errors) > 0 {
 		return nil, &vnstock.Error{
 			Code:    vnstock.HTTPError,
@@ -1216,39 +1406,98 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 		}
 	}
 
-	// Extract the financial data from the dynamic key
-	var financialData []struct {
-		Year    int                `json:"year"`
-		Quarter int                `json:"quarter"`
-		Fields  map[string]float64 `json:"fields"`
-	}
-
-	for _, items := range graphqlResp.Data {
-		financialData = items
-		break
-	}
-
-	if len(financialData) == 0 {
+	ratioData := graphqlResp.Data.CompanyFinancialRatio.Ratio
+	if len(ratioData) == 0 {
 		return nil, &vnstock.Error{
 			Code:    vnstock.NoData,
 			Message: "no financial statement data available",
 		}
 	}
 
-	// Map to FinancialPeriod slice
-	periods := make([]vnstock.FinancialPeriod, 0, len(financialData))
-	for _, item := range financialData {
+	// Convert ratio data to FinancialPeriod slice
+	// Each ratio entry contains yearReport, lengthReport, and all financial fields
+	periods := make([]vnstock.FinancialPeriod, 0, len(ratioData))
+	for _, entry := range ratioData {
+		year := int(toFloat64(entry["yearReport"]))
+		quarter := int(toFloat64(entry["lengthReport"]))
+
+		fields := make(map[string]float64)
+		for key, val := range entry {
+			switch key {
+			case "ticker", "yearReport", "lengthReport", "updateDate", "__typename":
+				continue
+			default:
+				if v := toFloat64(val); v != 0 {
+					fields[key] = v
+				}
+			}
+		}
+
+		// Map common aliases for downstream consumers
+		if _, ok := fields["pe"]; !ok {
+			if v, ok := fields["pe_ratio"]; ok {
+				fields["pe"] = v
+			}
+		}
+		if _, ok := fields["market_cap"]; !ok {
+			// market_cap = pe * netProfit (approximate)
+			if pe, ok1 := fields["pe"]; ok1 {
+				if np, ok2 := fields["netProfit"]; ok2 && np != 0 {
+					fields["market_cap"] = pe * np
+				}
+			}
+		}
+		if _, ok := fields["ev_ebitda"]; !ok {
+			if v, ok := fields["evPerEbitda"]; ok {
+				fields["ev_ebitda"] = v
+			}
+		}
+		if _, ok := fields["debt_to_equity"]; !ok {
+			if v, ok := fields["de"]; ok {
+				fields["debt_to_equity"] = v
+			}
+		}
+		if _, ok := fields["dividend_yield"]; !ok {
+			if v, ok := fields["dividend"]; ok {
+				fields["dividend_yield"] = v
+			}
+		}
+		if _, ok := fields["revenue_growth"]; !ok {
+			if v, ok := fields["revenueGrowth"]; ok {
+				fields["revenue_growth"] = v
+			}
+		}
+		if _, ok := fields["profit_growth"]; !ok {
+			if v, ok := fields["netProfitGrowth"]; ok {
+				fields["profit_growth"] = v
+			}
+		}
+		if _, ok := fields["net_income_growth"]; !ok {
+			if v, ok := fields["netProfitGrowth"]; ok {
+				fields["net_income_growth"] = v
+			}
+		}
+		if _, ok := fields["pb_ratio"]; !ok {
+			if v, ok := fields["pb"]; ok {
+				fields["pb_ratio"] = v
+			}
+		}
+		if _, ok := fields["pe_ratio"]; !ok {
+			if v, ok := fields["pe"]; ok {
+				fields["pe_ratio"] = v
+			}
+		}
+
 		periods = append(periods, vnstock.FinancialPeriod{
 			Symbol:  req.Symbol,
 			Period:  req.Period,
-			Year:    item.Year,
-			Quarter: item.Quarter,
-			Fields:  item.Fields,
+			Year:    year,
+			Quarter: quarter,
+			Fields:  fields,
 		})
 	}
 
-	// Sort by (Year, Quarter) descending
-	// More recent periods first
+	// Sort by (Year, Quarter) descending — most recent first
 	for i := 0; i < len(periods)-1; i++ {
 		for j := i + 1; j < len(periods); j++ {
 			if periods[i].Year < periods[j].Year ||
@@ -1259,6 +1508,25 @@ func (c *Connector) FinancialStatement(ctx context.Context, req vnstock.Financia
 	}
 
 	return periods, nil
+}
+
+// toFloat64 safely converts an interface{} to float64.
+func toFloat64(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case json.Number:
+		f, _ := val.Float64()
+		return f
+	default:
+		return 0
+	}
 }
 
 // FinancialRatios retrieves key financial ratios for a company.
